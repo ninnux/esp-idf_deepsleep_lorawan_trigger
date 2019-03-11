@@ -41,6 +41,8 @@
 //#include "DHT22.h"
 //}
 
+#define SLEEP_TIME 1800
+
 static RTC_DATA_ATTR struct timeval sleep_enter_time;
 
 uint8_t msgData[20];
@@ -49,65 +51,37 @@ SemaphoreHandle_t xSemaphore = NULL;
 
 void DHT_task(void *pvParameter)
 {
-   float hsum=0;
-   float tsum=0;
+   //float hsum=0;
+   //float tsum=0;
    if( xSemaphore != NULL )
    {
        if( xSemaphoreTake( xSemaphore, ( TickType_t ) 10 ) == pdTRUE )
        {
-        //vTaskDelay( 5000 / portTICK_RATE_MS );
-	//setDHTgpio( 4 );
-	//printf( "Starting DHT Task\n\n");
-	//int i=0;
-	//for(i=0;i<10;i++) {
-	//	int ret = readDHT();
-	//	printf( "Hum %.1f\n", getHumidity() );
-	//	printf( "Tmp %.1f\n", getTemperature() );
-	//}
-	//for(i=0;i<10;i++) {
-	//
-	//	printf("=== Reading DHT %d ===\n",i );
-	//	int ret = readDHT();
-	//	
-	//	errorHandler(ret);
+    	switch (esp_sleep_get_wakeup_cause()) {
+    	    case ESP_SLEEP_WAKEUP_EXT1: {
+    	        uint64_t wakeup_pin_mask = esp_sleep_get_ext1_wakeup_status();
+    	        if (wakeup_pin_mask != 0) {
+    	            int pin = __builtin_ffsll(wakeup_pin_mask) - 1;
+    	            printf("Wake up from GPIO %d\n", pin);
+    	        	sprintf((char*)msgData,"pin");
+    	        } else {
+    	            printf("Wake up from GPIO\n");
+    	        }
+    	        break;
+    	    }
+    	    case ESP_SLEEP_WAKEUP_EXT0: {
+    	        sprintf((char*)msgData,"pin");
+    	        break;
+    	    }
+    	    case ESP_SLEEP_WAKEUP_TIMER: {
+    	        sprintf((char*)msgData,"timer");
+    	        break;
+    	    }
+    	    case ESP_SLEEP_WAKEUP_UNDEFINED:
+    	    default:
+    	        printf("Not a deep sleep reset\n");
+    	}
 
-	//	printf( "Hum %.1f\n", getHumidity() );
-	//	printf( "Tmp %.1f\n", getTemperature() );
-
-	//	hsum+= getHumidity();
-	//	tsum+= getTemperature();
-	//	
-	//	// -- wait at least 2 sec before reading again ------------
-	//	// The interval of whole process must be beyond 2 seconds !! 
-	//	vTaskDelay( 3000 / portTICK_RATE_MS );
-	//}
-	//int h=hsum/i*10;
-	//int t=tsum/i*10;
-	//sprintf((char*)msgData,"hum:%d,temp:%d",h,t);
-    
- switch (esp_sleep_get_wakeup_cause()) {
-        case ESP_SLEEP_WAKEUP_EXT1: {
-            uint64_t wakeup_pin_mask = esp_sleep_get_ext1_wakeup_status();
-            if (wakeup_pin_mask != 0) {
-                int pin = __builtin_ffsll(wakeup_pin_mask) - 1;
-                printf("Wake up from GPIO %d\n", pin);
-	    	sprintf((char*)msgData,"pin");
-            } else {
-                printf("Wake up from GPIO\n");
-            }
-            break;
-        }
-        case ESP_SLEEP_WAKEUP_TIMER: {
-	    sprintf((char*)msgData,"timer");
-            break;
-        }
-        case ESP_SLEEP_WAKEUP_UNDEFINED:
-        default:
-            printf("Not a deep sleep reset\n");
-    }
-
-	
-	//sprintf((char*)msgData,"sono acceso");
 	xSemaphoreGive( xSemaphore );
        }
     
@@ -133,6 +107,10 @@ void sleeppa(int sec)
             }
             break;
         }
+        case ESP_SLEEP_WAKEUP_EXT0: {
+                printf("Wake up from GPIO EXT0 12\n");
+            break;
+        }
         case ESP_SLEEP_WAKEUP_TIMER: {
             printf("Wake up from timer. Time spent in deep sleep: %dms\n", sleep_time_ms);
             break;
@@ -148,15 +126,20 @@ void sleeppa(int sec)
     printf("Enabling timer wakeup, %ds\n", wakeup_time_sec);
     esp_sleep_enable_timer_wakeup(wakeup_time_sec * 1000000);
 
-    const int ext_wakeup_pin_1 = 33;
-    const uint64_t ext_wakeup_pin_1_mask = 1ULL << ext_wakeup_pin_1;
-    const int ext_wakeup_pin_2 = 12;
-    const uint64_t ext_wakeup_pin_2_mask = 1ULL << ext_wakeup_pin_2;
+//    const int ext_wakeup_pin_1 = 33;
+//    const uint64_t ext_wakeup_pin_1_mask = 1ULL << ext_wakeup_pin_1;
+//    const int ext_wakeup_pin_2 = 12;
+//    const uint64_t ext_wakeup_pin_2_mask = 1ULL << ext_wakeup_pin_2;
+//
+//    printf("Enabling EXT1 wakeup on pins GPIO%d, GPIO%d\n", ext_wakeup_pin_1, ext_wakeup_pin_2);
+//    esp_sleep_enable_ext1_wakeup(ext_wakeup_pin_1_mask | ext_wakeup_pin_2_mask, ESP_EXT1_WAKEUP_ANY_HIGH);
+//    //esp_sleep_enable_ext1_wakeup(ext_wakeup_pin_2_mask, ESP_EXT1_WAKEUP_ALL_LOW);
+    
+    rtc_gpio_pullup_en(GPIO_NUM_12); 
+    rtc_gpio_pulldown_dis(GPIO_NUM_12); 
+    esp_sleep_enable_ext0_wakeup(GPIO_NUM_12, 0);
 
-    printf("Enabling EXT1 wakeup on pins GPIO%d, GPIO%d\n", ext_wakeup_pin_1, ext_wakeup_pin_2);
-    //esp_sleep_enable_ext1_wakeup(ext_wakeup_pin_1_mask | ext_wakeup_pin_2_mask, ESP_EXT1_WAKEUP_ANY_HIGH);
-    esp_sleep_enable_ext1_wakeup(ext_wakeup_pin_1_mask | ext_wakeup_pin_2_mask, ESP_EXT1_WAKEUP_ANY_HIGH);
-
+    
     // Isolate GPIO12 pin from external circuits. This is needed for modules
     // which have an external pull-up resistor on GPIO12 (such as ESP32-WROVER)
     // to minimize current consumption.
@@ -211,7 +194,7 @@ void sendMessages(void* pvParameter)
     	    	printf("Sending message...%s size:%d\n",msgData,sizeof(msgData));
     	    	TTNResponseCode res = ttn.transmitMessage(msgData, sizeof(msgData) - 1);
     	    	printf(res == kTTNSuccessfulTransmission ? "Message sent.\n" : "Transmission failed.\n");
-    	    	sleeppa(1800);
+    	    	sleeppa(SLEEP_TIME);
     	    	//vTaskDelay(TX_INTERVAL * 1000 / portTICK_PERIOD_MS);
     	    }else{
     	    	//printf("semaforo occupato");
@@ -264,5 +247,6 @@ extern "C" void app_main(void)
     else
     {
         printf("Join failed. Goodbye\n");
+	sleeppa(SLEEP_TIME);
     }
 }
